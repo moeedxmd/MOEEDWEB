@@ -56,10 +56,10 @@
 "value": "avnadmin",
 "required": true
 },
-	"DB_PASSWORD": {
-	"description": "Aiven MySQL database password. Replace with your newly rotated password.",
-	"value": "REPLACE_WITH_AIVEN_DB_PASSWORD",
-	"required": true
+"DB_PASSWORD": {
+"description": "Aiven MySQL database password. Replace with your newly rotated password.",
+"value": "AVNS_DNDcjW8QD1AAv_FnvPb",
+"required": true
 }
 }
 }
