@@ -2,14 +2,14 @@ import crypto from 'node:crypto'
 import { sessionExists } from './db.js'
 
 /*
- * One-tap Heroku deploy for RAZA MD, same flow as the .deploy plugin.
+ * One-tap Heroku deploy for MOEED MD, same flow as the .deploy plugin.
  * The bot runs as a worker only: web is scaled to 0 and worker to 1.
  * Uses Node's built-in fetch (Node 18+), so no new packages are needed.
  *
  * Config vars on THIS web app:
  *   HEROKU_API_KEY   required  (auto-forwarded to every bot as HEROKU_API_KEY)
  *   PAIR_SERVER_URL  this site's public URL (each bot fetches its session from it)
- *   BOT_REPO         default LEGEND-RAZA/RAZA-MD
+ *   BOT_REPO         default LEGEND-MOEED/R-MD
  *   BOT_BRANCH       default main
  *   DYNO_SIZE        default basic
  *   PREFIX, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
@@ -56,7 +56,7 @@ function limited(ip) {
 const sessionOk = token => sessionExists(token).catch(() => false)
 
 async function run(job, name, token) {
-  const repo = process.env.BOT_REPO || 'LEGEND-RAZA/RAZA-MD'
+  const repo = process.env.BOT_REPO || 'moeedxmd/LEGEND-MOEED'
   const branch = process.env.BOT_BRANCH || 'main'
   const size = process.env.DYNO_SIZE || 'basic'
 
@@ -90,7 +90,7 @@ async function run(job, name, token) {
     const build = await heroku('POST', `/apps/${name}/builds`, {
       source_blob: {
         url: `https://github.com/${repo}/archive/refs/heads/${branch}.tar.gz`,
-        version_description: `Raza-MD deploy from ${repo}@${branch}`
+        version_description: `Moeed-MD deploy from ${repo}@${branch}`
       }
     })
     for (let i = 0; ; i++) {
@@ -134,7 +134,7 @@ export function mountDeploy(app) {
     const token = String(req.body?.sessionId || '').trim()
 
     if (!/^[a-z][a-z0-9-]{2,29}$/.test(name)) return fail(400, 'Invalid app name.')
-    if (!/^RAZA_[A-Za-z0-9_-]{10,100}$/.test(token) || !(await sessionOk(token))) {
+    if (!/^moeed_[A-Za-z0-9_-]{10,100}$/.test(token) || !(await sessionOk(token))) {
       return fail(400, 'Session ID not found or expired. Get a new one.')
     }
     if (used.has(token)) return fail(409, 'This session ID is already being deployed.')
