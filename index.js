@@ -8,7 +8,7 @@ import { Boom } from '@hapi/boom'
 import { ensureDb, putSession, getSession, updateSession, pruneSessions } from './db.js'
 import { mountDeploy } from './deploy.js'
 
-// Never let a stray WhatsApp-library error take the whole site down.
+// Process crash safety
 process.on('uncaughtException', e => console.error('[PROCESS] Uncaught exception:', e?.stack || e?.message || e))
 process.on('unhandledRejection', e => console.error('[PROCESS] Unhandled rejection:', e?.stack || e?.message || e))
 
@@ -28,8 +28,6 @@ app.use((req, res, next) =>
 )
 app.use(express.static(path.join(ROOT, 'public')))
 
-await fs.mkdir(SESSIONS, { recursive: true })
-
 const makeId = () => crypto.randomBytes(16).toString('hex')
 const makeToken = () => 'MOEED_' + crypto.randomBytes(18).toString('base64url')
 const cleanNumber = v => String(v || '').replace(/\D/g, '')
@@ -43,7 +41,6 @@ async function cleanupJob(job) {
     try { job.sock.ws?.close() } catch {}
     try { job.sock.end(undefined) } catch {}
   }
-  // Give in-flight key writes a moment to finish before the folder disappears.
   await delay(2000)
   await fs.rm(job.dir, { recursive: true, force: true }).catch(() => {})
 }
@@ -121,12 +118,10 @@ async function connectJob(job) {
         await delay(1500)
         if (job.cleaned) return
 
-        // 1. Store the session first so the token is valid straight away.
         const token = makeToken()
         await putSession({ token, number: job.number, ...(await snapshot(job.dir)) })
         job.token = token
 
-        // 2. Send it to the user's own chat (single message).
         const jid = `${job.number}@s.whatsapp.net`
         try {
           await sock.sendMessage(jid, { text: token })
@@ -137,7 +132,6 @@ async function connectJob(job) {
           console.error('[SEND ERROR]', e?.message || e)
         }
 
-        // 3. Save the final state (includes keys created while sending), then finish.
         await delay(2500)
         await saveCreds()
         await putSession({ token, number: job.number, ...(await snapshot(job.dir)) })
@@ -197,7 +191,6 @@ app.post('/api/pair', async (req, res) => {
       return res.status(503).json({ success: false, error: 'Session storage is unavailable. Try again shortly.' })
     }
 
-    // Per-IP rate limit
     const now = Date.now()
     const list = (hits.get(req.ip) || []).filter(t => now - t < 10 * 60 * 1000)
     list.push(now)
@@ -206,7 +199,6 @@ app.post('/api/pair', async (req, res) => {
       return res.status(429).json({ success: false, error: 'Too many attempts. Try again in a few minutes.' })
     }
 
-    // Reuse only if the SAME click fired two requests within 2 seconds (double-tap debounce)
     const veryRecent = [...jobs.values()].find(j =>
       j.number === number && Date.now() - j.createdAt < 2000
     )
@@ -214,7 +206,6 @@ app.post('/api/pair', async (req, res) => {
       return res.json({ success: true, id: veryRecent.id, code: veryRecent.code, status: veryRecent.status })
     }
 
-    // Kill any previous job for this number so a fresh pairing code is always issued
     for (const [id, j] of [...jobs.entries()]) {
       if (j.number === number) {
         cleanupJob(j).catch(() => {})
@@ -222,7 +213,6 @@ app.post('/api/pair', async (req, res) => {
       }
     }
 
-    // Server capacity guard
     const running = [...jobs.values()].filter(j => !['ready', 'error'].includes(j.status))
     if (running.length >= 20) {
       return res.status(429).json({ success: false, error: 'The server is busy. Try again in a minute.' })
@@ -298,7 +288,6 @@ app.get('/api/session/:token', async (req, res) => {
   }
 })
 
-// The bot uploads its latest keys here so a Heroku restart resumes from fresh state.
 app.put('/api/session/:token', async (req, res) => {
   const token = String(req.params.token || '').trim()
   if (!/^MOEED_[A-Za-z0-9_-]{10,100}$/.test(token)) {
@@ -320,20 +309,7 @@ app.put('/api/session/:token', async (req, res) => {
     return res.status(400).json({ success: false, error: 'creds.json missing from payload' })
   }
 
-  /*
-   * Filename validation.
-   *
-   * Baileys 7.x writes group sender-key files with '@' in the name, e.g.
-   *   sender-key-120363429299945923@g.us--923201822076@s.whatsapp.net--ABC123.json
-   *   sender-key-memory-120363429299945923@g.us.json
-   * The previous regex omitted '@', so EVERY sync failed with 400 the moment
-   * the session contained a single group key.
-   *
-   * Allowed characters: A-Z a-z 0-9 . _ @ -
-   * Plus explicit path-traversal guards (no '..', '/', '\', leading '.').
-   */
   const NAME_RE = /^[A-Za-z0-9._@-]{1,200}$/
-
   const badName = names.find(n =>
     typeof n !== 'string' ||
     !NAME_RE.test(n) ||
@@ -353,7 +329,6 @@ app.put('/api/session/:token', async (req, res) => {
     })
   }
 
-  // creds.json must decode to JSON with a real me.id — proves the session is paired.
   let paired = false
   try {
     const decoded = Buffer.from(files['creds.json'], 'base64').toString('utf8')
@@ -395,9 +370,21 @@ setInterval(async () => {
   if (days > 0) await pruneSessions(days).catch(() => {})
 }, 60 * 1000).unref()
 
-app.listen(PORT, () => {
-  console.log(`MOEED PAIR running on port ${PORT}`)
-  ensureDb()
-    .then(() => console.log('[+] MySQL session storage ready.'))
-    .catch(e => console.error('[DB]', e?.message || e))
-})
+// Clean async startup wrapper to prevent top-level await crash
+async function startServer() {
+  try {
+    await fs.mkdir(SESSIONS, { recursive: true })
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`MOEED PAIR running on port ${PORT}`)
+    })
+
+    ensureDb()
+      .then(() => console.log('[+] MySQL session storage ready.'))
+      .catch(e => console.error('[DB]', e?.message || e))
+  } catch (err) {
+    console.error('[BOOT ERROR] Could not initialize server:', err)
+  }
+}
+
+startServer()
