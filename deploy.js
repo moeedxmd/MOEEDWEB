@@ -9,7 +9,7 @@ import { sessionExists } from './db.js'
  * Config vars on THIS web app:
  *   HEROKU_API_KEY   required  (auto-forwarded to every bot as HEROKU_API_KEY)
  *   PAIR_SERVER_URL  this site's public URL (each bot fetches its session from it)
- *   BOT_REPO         default LEGEND-MOEED/R-MD
+ *   BOT_REPO         default moeedxmd/LEGEND-MOEED
  *   BOT_BRANCH       default main
  *   DYNO_SIZE        default basic
  *   PREFIX, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
