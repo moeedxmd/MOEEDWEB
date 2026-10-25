@@ -29,7 +29,7 @@ app.use((req, res, next) =>
 app.use(express.static(path.join(ROOT, 'public')))
 
 const makeId = () => crypto.randomBytes(16).toString('hex')
-const makeToken = () => 'MOEED_' + crypto.randomBytes(18).toString('base64url')
+const makeToken = () => 'moeed_' + crypto.randomBytes(18).toString('base64url')
 const cleanNumber = v => String(v || '').replace(/\D/g, '')
 const delay = ms => new Promise(r => setTimeout(r, ms))
 
@@ -274,7 +274,7 @@ app.get('/api/status/:id', (req, res) => {
 
 app.get('/api/session/:token', async (req, res) => {
   const token = String(req.params.token || '').trim()
-  if (!/^MOEED_[A-Za-z0-9_-]{10,100}$/.test(token)) {
+  if (!/^moeed_[A-Za-z0-9_-]{10,100}$/.test(token)) {
     return res.status(400).json({ success: false, error: 'Invalid session token' })
   }
   try {
@@ -290,7 +290,7 @@ app.get('/api/session/:token', async (req, res) => {
 
 app.put('/api/session/:token', async (req, res) => {
   const token = String(req.params.token || '').trim()
-  if (!/^MOEED_[A-Za-z0-9_-]{10,100}$/.test(token)) {
+  if (!/^moeed_[A-Za-z0-9_-]{10,100}$/.test(token)) {
     return res.status(400).json({ success: false, error: 'Invalid session token' })
   }
 
